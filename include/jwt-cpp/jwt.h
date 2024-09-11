@@ -72,6 +72,10 @@
 #define JWT_CLAIM_EXPLICIT explicit
 #endif
 
+#ifndef JWT_STDERR_MESSAGE
+#define JWT_STDERR_MESSAGE(msg) std::cerr << "JWT ERROR: " << msg << std::endl
+#endif
+
 /**
  * \brief JSON Web Token.
  *
@@ -381,14 +385,16 @@ namespace jwt {
 		 * \brief Raises an exception if any JWT-CPP error codes are active
 		 */
 		inline void throw_if_error(std::error_code ec) {
-			if (ec) {
-				if (ec.category() == rsa_error_category()) throw rsa_exception(ec);
-				if (ec.category() == ecdsa_error_category()) throw ecdsa_exception(ec);
-				if (ec.category() == signature_verification_error_category())
-					throw signature_verification_exception(ec);
-				if (ec.category() == signature_generation_error_category()) throw signature_generation_exception(ec);
-				if (ec.category() == token_verification_error_category()) throw token_verification_exception(ec);
-			}
+			if (!ec) return;
+			std::system_error error;
+			if (ec.category() == rsa_error_category()) error = rsa_exception(ec);
+			else if (ec.category() == ecdsa_error_category()) error = ecdsa_exception(ec);
+			else if (ec.category() == signature_verification_error_category())
+				error = signature_verification_exception(ec);
+			else if (ec.category() == signature_generation_error_category()) error = signature_generation_exception(ec);
+			else if (ec.category() == token_verification_error_category()) error = token_verification_exception(ec);
+			else error = std::system_error(ec);
+			JWT_STDERR_MESSAGE(ec.message());
 		}
 	} // namespace error
 } // namespace jwt
@@ -448,7 +454,7 @@ namespace jwt {
 			 */
 			explicit constexpr evp_pkey_handle(EVP_PKEY* key) noexcept : m_key{key} {}
 			evp_pkey_handle(const evp_pkey_handle& other) : m_key{other.m_key} {
-				if (m_key != nullptr && EVP_PKEY_up_ref(m_key) != 1) throw std::runtime_error("EVP_PKEY_up_ref failed");
+				if (m_key != nullptr && EVP_PKEY_up_ref(m_key) != 1) JWT_STDERR_MESSAGE("EVP_PKEY_up_ref failed");
 			}
 // C++11 requires the body of a constexpr constructor to be empty
 #if __cplusplus >= 201402L
@@ -488,7 +494,7 @@ namespace jwt {
 			EVP_PKEY* m_key{nullptr};
 
 			static void increment_ref_count(EVP_PKEY* key) {
-				if (key != nullptr && EVP_PKEY_up_ref(key) != 1) throw std::runtime_error("EVP_PKEY_up_ref failed");
+				if (key != nullptr && EVP_PKEY_up_ref(key) != 1) JWT_STDERR_MESSAGE("EVP_PKEY_up_ref failed");
 			}
 			static void decrement_ref_count(EVP_PKEY* key) noexcept {
 				if (key != nullptr) EVP_PKEY_free(key);
@@ -1458,7 +1464,7 @@ namespace jwt {
 				} else if (!public_key.empty()) {
 					pkey = helper::load_public_key_from_string(public_key, public_key_password);
 				} else
-					throw error::rsa_exception(error::rsa_error::no_key_provided);
+					JWT_STDERR_MESSAGE("RSA error: no key provided");
 			}
 			/**
 			 * Sign jwt data
@@ -1561,13 +1567,17 @@ namespace jwt {
 					pkey = helper::load_public_ec_key_from_string(public_key, public_key_password);
 					check_public_key(pkey.get());
 				} else {
-					throw error::ecdsa_exception(error::ecdsa_error::no_key_provided);
+					JWT_STDERR_MESSAGE("ECDSA error: no key provided");
+					return;
 				}
-				if (!pkey) throw error::ecdsa_exception(error::ecdsa_error::invalid_key);
+				if (!pkey) {
+					JWT_STDERR_MESSAGE("ECDSA error: invalid key");
+					return;
+				}
 
 				size_t keysize = EVP_PKEY_bits(pkey.get());
 				if (keysize != signature_length * 4 && (signature_length != 132 || keysize != 521))
-					throw error::ecdsa_exception(error::ecdsa_error::invalid_key_size);
+					JWT_STDERR_MESSAGE("ECDSA error: invalid key size");
 			}
 
 			/**
@@ -1659,14 +1669,20 @@ namespace jwt {
 #ifdef JWT_OPENSSL_3_0
 				std::unique_ptr<EVP_PKEY_CTX, decltype(&EVP_PKEY_CTX_free)> ctx(
 					EVP_PKEY_CTX_new_from_pkey(nullptr, pkey, nullptr), EVP_PKEY_CTX_free);
-				if (!ctx) { throw error::ecdsa_exception(error::ecdsa_error::create_context_failed); }
+				if (!ctx) { 
+					JWT_STDERR_MESSAGE("ECDSA error: create context failed");
+					return;
+				}
 				if (EVP_PKEY_public_check(ctx.get()) != 1) {
-					throw error::ecdsa_exception(error::ecdsa_error::invalid_key);
+					JWT_STDERR_MESSAGE("ECDSA error: invalid key");
+					return;
 				}
 #else
 				std::unique_ptr<EC_KEY, decltype(&EC_KEY_free)> eckey(EVP_PKEY_get1_EC_KEY(pkey), EC_KEY_free);
-				if (!eckey) { throw error::ecdsa_exception(error::ecdsa_error::invalid_key); }
-				if (EC_KEY_check_key(eckey.get()) == 0) throw error::ecdsa_exception(error::ecdsa_error::invalid_key);
+				if (!eckey || EC_KEY_check_key(eckey.get()) == 0) {
+					JWT_STDERR_MESSAGE("ECDSA error: invalid key");
+					return;
+				}
 #endif
 			}
 
@@ -1674,14 +1690,20 @@ namespace jwt {
 #ifdef JWT_OPENSSL_3_0
 				std::unique_ptr<EVP_PKEY_CTX, decltype(&EVP_PKEY_CTX_free)> ctx(
 					EVP_PKEY_CTX_new_from_pkey(nullptr, pkey, nullptr), EVP_PKEY_CTX_free);
-				if (!ctx) { throw error::ecdsa_exception(error::ecdsa_error::create_context_failed); }
+				if (!ctx) { 
+					JWT_STDERR_MESSAGE("ECDSA error: create context failed");
+					return;
+				}
 				if (EVP_PKEY_private_check(ctx.get()) != 1) {
-					throw error::ecdsa_exception(error::ecdsa_error::invalid_key);
+					JWT_STDERR_MESSAGE("ECDSA error: invalid key");
+					return;
 				}
 #else
 				std::unique_ptr<EC_KEY, decltype(&EC_KEY_free)> eckey(EVP_PKEY_get1_EC_KEY(pkey), EC_KEY_free);
-				if (!eckey) { throw error::ecdsa_exception(error::ecdsa_error::invalid_key); }
-				if (EC_KEY_check_key(eckey.get()) == 0) throw error::ecdsa_exception(error::ecdsa_error::invalid_key);
+				if (!eckey || EC_KEY_check_key(eckey.get()) == 0) {
+					JWT_STDERR_MESSAGE("ECDSA error: invalid key");
+					return;
+				}
 #endif
 			}
 
@@ -1705,8 +1727,10 @@ namespace jwt {
 				auto rr = helper::bn2raw(r);
 				auto rs = helper::bn2raw(s);
 #endif
-				if (rr.size() > signature_length / 2 || rs.size() > signature_length / 2)
-					throw std::logic_error("bignum size exceeded expected length");
+				if (rr.size() > signature_length / 2 || rs.size() > signature_length / 2) {
+					JWT_STDERR_MESSAGE("ECDSA error: bignum size exceeded expected length");
+					return "";
+				}
 				rr.insert(0, signature_length / 2 - rr.size(), '\0');
 				rs.insert(0, signature_length / 2 - rs.size(), '\0');
 				return rr + rs;
@@ -1789,7 +1813,7 @@ namespace jwt {
 				} else if (!public_key.empty()) {
 					pkey = helper::load_public_key_from_string(public_key, public_key_password);
 				} else
-					throw error::ecdsa_exception(error::ecdsa_error::load_key_bio_read);
+					JWT_STDERR_MESSAGE("ECDSA error: load key bio read");
 			}
 			/**
 			 * Sign jwt data
@@ -1914,7 +1938,7 @@ namespace jwt {
 				} else if (!public_key.empty()) {
 					pkey = helper::load_public_key_from_string(public_key, public_key_password);
 				} else
-					throw error::rsa_exception(error::rsa_error::no_key_provided);
+					JWT_STDERR_MESSAGE("RSA error: no key provided");
 			}
 
 			/**
@@ -2724,7 +2748,10 @@ namespace jwt {
 			 */
 			static typename json_traits::object_type parse_claims(const typename json_traits::string_type& str) {
 				typename json_traits::value_type val;
-				if (!json_traits::parse(val, str)) throw error::invalid_json_exception();
+				if (!json_traits::parse(val, str)) {
+					JWT_STDERR_MESSAGE("Invalid JSON");
+					return typename json_traits::object_type{};
+				}
 
 				return json_traits::as_object(val);
 			};
@@ -2745,7 +2772,11 @@ namespace jwt {
 			 * \throw jwt::error::claim_not_present_exception if the claim was not present
 			 */
 			basic_claim_t get_claim(const typename json_traits::string_type& name) const {
-				if (!has_claim(name)) throw error::claim_not_present_exception();
+				if (!has_claim(name)) {
+					JWT_STDERR_MESSAGE("Claim not present");
+					basic_claim_t claim{};
+					return claim;
+				}
 				return basic_claim_t{claims.at(name)};
 			}
 		};
@@ -2997,9 +3028,15 @@ namespace jwt {
 		template<typename Decode>
 		decoded_jwt(const typename json_traits::string_type& token, Decode decode) : token(token) {
 			auto hdr_end = token.find('.');
-			if (hdr_end == json_traits::string_type::npos) throw std::invalid_argument("invalid token supplied");
+			if (hdr_end == json_traits::string_type::npos) {
+				JWT_STDERR_MESSAGE("invalid token supplied");
+				return;
+			}
 			auto payload_end = token.find('.', hdr_end + 1);
-			if (payload_end == json_traits::string_type::npos) throw std::invalid_argument("invalid token supplied");
+			if (payload_end == json_traits::string_type::npos) {
+				JWT_STDERR_MESSAGE("invalid token supplied");
+				return;
+			}
 			header_base64 = token.substr(0, hdr_end);
 			payload_base64 = token.substr(hdr_end + 1, payload_end - hdr_end - 1);
 			signature_base64 = token.substr(payload_end + 1);
@@ -3421,7 +3458,9 @@ namespace jwt {
 					case json::type::array:
 					case json::type::object:
 						return json_traits::serialize(expected.to_json()) == json_traits::serialize(jc.to_json());
-					default: throw std::logic_error("internal error, should be unreachable");
+					default:
+						JWT_STDERR_MESSAGE("internal error, should be unreachable");
+						return false;
 					}
 				}();
 				if (!matches) {
@@ -3525,10 +3564,12 @@ namespace jwt {
 					wchar_t wc;
 					std::size_t result = std::mbrtowc(&wc, in_next, in_end - in_next, &state);
 					if (result == static_cast<std::size_t>(-1)) {
-						throw std::runtime_error("encoding error: " + std::string(std::strerror(errno)));
+						JWT_STDERR_MESSAGE("encoding error: " + std::string(std::strerror(errno)));
+						break;
 					} else if (result == static_cast<std::size_t>(-2)) {
-						throw std::runtime_error("conversion error: next bytes constitute an incomplete, but so far "
-												 "valid, multibyte character.");
+						JWT_STDERR_MESSAGE("conversion error: next bytes constitute an incomplete, but so far "
+										   "valid, multibyte character.");
+						break;
 					}
 					in_next += result;
 					wide.push_back(wc);
@@ -3923,7 +3964,10 @@ namespace jwt {
 		 */
 		typename json_traits::string_type get_x5c_key_value() const {
 			auto x5c_array = get_jwk_claim("x5c").as_array();
-			if (x5c_array.size() == 0) throw error::claim_not_present_exception();
+			if (x5c_array.size() == 0) {
+				JWT_STDERR_MESSAGE("x5c claim not present");
+				return "";
+			}
 
 			return json_traits::as_string(x5c_array.front());
 		};
@@ -4051,11 +4095,16 @@ namespace jwt {
 		*/
 		JWT_CLAIM_EXPLICIT jwks(const typename json_traits::string_type& str) {
 			typename json_traits::value_type parsed_val;
-			if (!json_traits::parse(parsed_val, str)) throw error::invalid_json_exception();
+			if (!json_traits::parse(parsed_val, str)) {
+				JWT_STDERR_MESSAGE("Invalid JSON");
+				return;
+			}
 
 			const details::map_of_claims<json_traits> jwks_json = json_traits::as_object(parsed_val);
-			if (!jwks_json.has_claim("keys")) throw error::invalid_json_exception();
-
+			if (!jwks_json.has_claim("keys")) {
+				JWT_STDERR_MESSAGE("Invalid JSON");
+				return;
+			}
 			auto jwk_list = jwks_json.get_claim("keys").as_array();
 			std::transform(jwk_list.begin(), jwk_list.end(), std::back_inserter(jwk_claims),
 						   [](const typename json_traits::value_type& val) { return jwks_t{val}; });
@@ -4083,7 +4132,10 @@ namespace jwt {
 		 */
 		jwks_t get_jwk(const typename json_traits::string_type& key_id) const {
 			const auto maybe = find_by_kid(key_id);
-			if (maybe == end()) throw error::claim_not_present_exception();
+			if (maybe == end()) {
+				JWT_STDERR_MESSAGE("Claim not present");
+				return details::map_of_claims<json_traits>{};
+			}
 			return *maybe;
 		}
 

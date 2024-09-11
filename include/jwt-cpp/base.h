@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -17,6 +16,9 @@
 #ifndef JWT_FALLTHROUGH
 #define JWT_FALLTHROUGH
 #endif
+
+#define JWT_INVALID_INDEX 1023
+#define JWT_B64_STDERR_MESSAGE(msg) std::cerr << "JWT BASE64 DECODE ERROR: " << msg << std::endl
 
 namespace jwt {
 	/**
@@ -91,7 +93,10 @@ namespace jwt {
 
 		inline uint32_t index(const std::array<char, 64>& alphabet, char symbol) {
 			auto itr = std::find_if(alphabet.cbegin(), alphabet.cend(), [symbol](char c) { return c == symbol; });
-			if (itr == alphabet.cend()) { throw std::runtime_error("Invalid input: not within alphabet"); }
+			if (itr == alphabet.cend()) { 
+				JWT_B64_STDERR_MESSAGE("Invalid input: not within alphabet");
+				return 0;
+			}
 
 			return static_cast<uint32_t>(std::distance(alphabet.cbegin(), itr));
 		}
@@ -181,13 +186,19 @@ namespace jwt {
 			inline std::string decode(const std::string& base, const std::array<char, 64>& alphabet,
 									  const std::vector<std::string>& fill) {
 				const auto pad = count_padding(base, fill);
-				if (pad.count > 2) throw std::runtime_error("Invalid input: too much fill");
+				std::string res;
+				if (pad.count > 2) {
+					JWT_B64_STDERR_MESSAGE("Invalid input: too much fill");
+					return res;
+				}
 
 				const size_t size = base.size() - pad.length;
-				if ((size + pad.count) % 4 != 0) throw std::runtime_error("Invalid input: incorrect total size");
+				if ((size + pad.count) % 4 != 0) {
+					JWT_B64_STDERR_MESSAGE("Invalid input: incorrect total size");
+					return res;
+				}
 
 				size_t out_size = size / 4 * 3;
-				std::string res;
 				res.reserve(out_size);
 
 				auto get_sextet = [&](size_t offset) { return alphabet::index(alphabet, base[offset]); };

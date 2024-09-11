@@ -37,7 +37,6 @@
 #include <iterator>
 #include <limits>
 #include <map>
-#include <stdexcept>
 #include <string>
 #include <vector>
 #include <utility>
@@ -96,11 +95,18 @@ extern "C" {
 }
 #endif
 
+#ifndef PICOJSON_STDERR_MESSAGE
+#define PICOJSON_STDERR_MESSAGE(msg) std::cerr << "picojson ERROR: " << msg << std::endl
+#endif
+
 #ifndef PICOJSON_ASSERT
 #define PICOJSON_ASSERT(e)                                                                                                         \
+  bool picoJsonAssertFail = false;                                                                                                 \
   do {                                                                                                                             \
-    if (!(e))                                                                                                                      \
-      throw std::runtime_error(#e);                                                                                                \
+    if (!(e)) {                                                                                                                    \
+      PICOJSON_STDERR_MESSAGE("assertion failed: " << #e);                                                                         \
+      picoJsonAssertFail = true;                                                                                                   \
+    }                                                                                                                              \
   } while (0)
 #endif
 
@@ -252,7 +258,8 @@ inline value::value(double n) : type_(number_type), u_() {
       isnan(n) || isinf(n)
 #endif
           ) {
-    throw std::overflow_error("");
+    PICOJSON_STDERR_MESSAGE("overflow error");
+    n = 0;
   }
   u_.number_ = n;
 }
@@ -369,24 +376,35 @@ template <> inline bool value::is<double>() const {
       ;
 }
 
-#define GET(ctype, var)                                                                                                            \
+namespace {
+  bool kDefaultBool = false;
+  std::string kDefaultStr = "";
+  array kDefaultArray = array{};
+  object kDefaultObject = object{};
+  double kDefaultDouble = 0;
+  int64_t kDefaultInt64 = 0;
+}
+
+#define GET(ctype, var, defaultVal)                                                                                                \
   template <> inline const ctype &value::get<ctype>() const {                                                                      \
     PICOJSON_ASSERT("type mismatch! call is<type>() before get<type>()" && is<ctype>());                                           \
+    if (picoJsonAssertFail) return defaultVal;                                                                                     \
     return var;                                                                                                                    \
   }                                                                                                                                \
   template <> inline ctype &value::get<ctype>() {                                                                                  \
     PICOJSON_ASSERT("type mismatch! call is<type>() before get<type>()" && is<ctype>());                                           \
+    if (picoJsonAssertFail) return defaultVal;                                                                                     \
     return var;                                                                                                                    \
   }
-GET(bool, u_.boolean_)
-GET(std::string, *u_.string_)
-GET(array, *u_.array_)
-GET(object, *u_.object_)
+GET(bool, u_.boolean_, kDefaultBool)
+GET(std::string, *u_.string_, kDefaultStr)
+GET(array, *u_.array_, kDefaultArray)
+GET(object, *u_.object_, kDefaultObject)
 #ifdef PICOJSON_USE_INT64
 GET(double,
     (type_ == int64_type && (const_cast<value *>(this)->type_ = number_type, (const_cast<value *>(this)->u_.number_ = u_.int64_)),
-     u_.number_))
-GET(int64_t, u_.int64_)
+     u_.number_), kDefaultDouble)
+GET(int64_t, u_.int64_, kDefaultInt64)
 #else
 GET(double, u_.number_)
 #endif
@@ -443,18 +461,21 @@ inline bool value::evaluate_as_boolean() const {
 inline const value &value::get(const size_t idx) const {
   static value s_null;
   PICOJSON_ASSERT(is<array>());
+  if (picoJsonAssertFail) return s_null;
   return idx < u_.array_->size() ? (*u_.array_)[idx] : s_null;
 }
 
 inline value &value::get(const size_t idx) {
   static value s_null;
   PICOJSON_ASSERT(is<array>());
+  if (picoJsonAssertFail) return s_null;
   return idx < u_.array_->size() ? (*u_.array_)[idx] : s_null;
 }
 
 inline const value &value::get(const std::string &key) const {
   static value s_null;
   PICOJSON_ASSERT(is<object>());
+  if (picoJsonAssertFail) return s_null;
   object::const_iterator i = u_.object_->find(key);
   return i != u_.object_->end() ? i->second : s_null;
 }
@@ -462,17 +483,20 @@ inline const value &value::get(const std::string &key) const {
 inline value &value::get(const std::string &key) {
   static value s_null;
   PICOJSON_ASSERT(is<object>());
+  if (picoJsonAssertFail) return s_null;
   object::iterator i = u_.object_->find(key);
   return i != u_.object_->end() ? i->second : s_null;
 }
 
 inline bool value::contains(const size_t idx) const {
   PICOJSON_ASSERT(is<array>());
+  if (picoJsonAssertFail) return false;
   return idx < u_.array_->size();
 }
 
 inline bool value::contains(const std::string &key) const {
   PICOJSON_ASSERT(is<object>());
+  if (picoJsonAssertFail) return false;
   object::const_iterator i = u_.object_->find(key);
   return i != u_.object_->end();
 }
@@ -515,6 +539,7 @@ inline std::string value::to_str() const {
     return "object";
   default:
     PICOJSON_ASSERT(0);
+    if (picoJsonAssertFail) return std::string();
 #ifdef _MSC_VER
     __assume(0);
 #endif
@@ -1160,6 +1185,7 @@ inline bool operator==(const value &x, const value &y) {
   PICOJSON_CMP(object);
 #undef PICOJSON_CMP
   PICOJSON_ASSERT(0);
+  if (picoJsonAssertFail) return false;  
 #ifdef _MSC_VER
   __assume(0);
 #endif

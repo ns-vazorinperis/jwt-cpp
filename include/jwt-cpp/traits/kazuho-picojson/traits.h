@@ -35,36 +35,55 @@ namespace jwt {
 				if (val.is<picojson::array>()) return type::array;
 				if (val.is<picojson::object>()) return type::object;
 
-				throw std::logic_error("invalid type");
+				JWT_STDERR_MESSAGE("invalid type");
+				return type::object;
 			}
 
 			static picojson::object as_object(const picojson::value& val) {
-				if (!val.is<picojson::object>()) throw std::bad_cast();
+				if (!val.is<picojson::object>()) {
+					JWT_STDERR_MESSAGE("Bad cast");
+					return picojson::object{};	
+				}
 				return val.get<picojson::object>();
 			}
 
 			static std::string as_string(const picojson::value& val) {
-				if (!val.is<std::string>()) throw std::bad_cast();
+				if (!val.is<std::string>()) {
+					JWT_STDERR_MESSAGE("Bad cast");
+					return "";	
+				}
 				return val.get<std::string>();
 			}
 
 			static picojson::array as_array(const picojson::value& val) {
-				if (!val.is<picojson::array>()) throw std::bad_cast();
+				if (!val.is<picojson::array>()){
+					JWT_STDERR_MESSAGE("Bad cast");
+					return picojson::array{};
+				}
 				return val.get<picojson::array>();
 			}
 
 			static int64_t as_integer(const picojson::value& val) {
-				if (!val.is<int64_t>()) throw std::bad_cast();
+				if (!val.is<int64_t>()) {
+					JWT_STDERR_MESSAGE("Bad cast");
+					return -1;
+				}
 				return val.get<int64_t>();
 			}
 
 			static bool as_boolean(const picojson::value& val) {
-				if (!val.is<bool>()) throw std::bad_cast();
+				if (!val.is<bool>()) {
+					JWT_STDERR_MESSAGE("Bad cast");
+					return false;
+				}
 				return val.get<bool>();
 			}
 
 			static double as_number(const picojson::value& val) {
-				if (!val.is<double>()) throw std::bad_cast();
+				if (!val.is<double>()) {
+					JWT_STDERR_MESSAGE("Bad cast");
+					return -1;
+				}
 				return val.get<double>();
 			}
 

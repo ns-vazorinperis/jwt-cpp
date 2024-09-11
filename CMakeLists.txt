@@ -26,6 +26,9 @@ if(JWT_DISABLE_BASE64)
   target_compile_definitions(jwt-cpp INTERFACE JWT_DISABLE_BASE64)
 endif()
 
+# Force noexcept in picojson throwing functions
+target_compile_definitions(jwt-cpp INTERFACE PICOJSON_NOEXCEPT=noexcept)
+
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 target_include_directories(jwt-cpp INTERFACE $<BUILD_INTERFACE:${JWT_INCLUDE_PATH}>
