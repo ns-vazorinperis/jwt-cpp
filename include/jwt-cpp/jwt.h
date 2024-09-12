@@ -131,7 +131,7 @@ namespace jwt {
 		inline std::error_category& rsa_error_category() {
 			class rsa_error_cat : public std::error_category {
 			public:
-				const char* name() const noexcept override { return "rsa_error"; };
+				const char* name() const noexcept override { return "rsa_error"; }
 				std::string message(int ev) const override {
 					switch (static_cast<rsa_error>(ev)) {
 					case rsa_error::ok: return "no error";
@@ -183,7 +183,7 @@ namespace jwt {
 		inline std::error_category& ecdsa_error_category() {
 			class ecdsa_error_cat : public std::error_category {
 			public:
-				const char* name() const noexcept override { return "ecdsa_error"; };
+				const char* name() const noexcept override { return "ecdsa_error"; }
 				std::string message(int ev) const override {
 					switch (static_cast<ecdsa_error>(ev)) {
 					case ecdsa_error::ok: return "no error";
@@ -234,7 +234,7 @@ namespace jwt {
 		inline std::error_category& signature_verification_error_category() {
 			class verification_error_cat : public std::error_category {
 			public:
-				const char* name() const noexcept override { return "signature_verification_error"; };
+				const char* name() const noexcept override { return "signature_verification_error"; }
 				std::string message(int ev) const override {
 					switch (static_cast<signature_verification_error>(ev)) {
 					case signature_verification_error::ok: return "no error";
@@ -293,7 +293,7 @@ namespace jwt {
 		inline std::error_category& signature_generation_error_category() {
 			class signature_generation_error_cat : public std::error_category {
 			public:
-				const char* name() const noexcept override { return "signature_generation_error"; };
+				const char* name() const noexcept override { return "signature_generation_error"; }
 				std::string message(int ev) const override {
 					switch (static_cast<signature_generation_error>(ev)) {
 					case signature_generation_error::ok: return "no error";
@@ -355,7 +355,7 @@ namespace jwt {
 		inline std::error_category& token_verification_error_category() {
 			class token_verification_error_cat : public std::error_category {
 			public:
-				const char* name() const noexcept override { return "token_verification_error"; };
+				const char* name() const noexcept override { return "token_verification_error"; }
 				std::string message(int ev) const override {
 					switch (static_cast<token_verification_error>(ev)) {
 					case token_verification_error::ok: return "no error";
@@ -386,15 +386,13 @@ namespace jwt {
 		 */
 		inline void throw_if_error(std::error_code ec) {
 			if (!ec) return;
-			std::system_error error;
-			if (ec.category() == rsa_error_category()) error = rsa_exception(ec);
-			else if (ec.category() == ecdsa_error_category()) error = ecdsa_exception(ec);
-			else if (ec.category() == signature_verification_error_category())
-				error = signature_verification_exception(ec);
-			else if (ec.category() == signature_generation_error_category()) error = signature_generation_exception(ec);
-			else if (ec.category() == token_verification_error_category()) error = token_verification_exception(ec);
-			else error = std::system_error(ec);
-			JWT_STDERR_MESSAGE(ec.message());
+			std::string errorCategory = "unknown category";
+			if (ec.category() == rsa_error_category()) errorCategory = "rsa_error_category";
+			if (ec.category() == ecdsa_error_category()) errorCategory = "ecdsa_error_category";
+			if (ec.category() == signature_verification_error_category()) errorCategory = "signature_verification_error_category";
+			if (ec.category() == signature_generation_error_category()) errorCategory = "signature_generation_error_category";
+			if (ec.category() == token_verification_error_category()) errorCategory = "token_verification_error_category";
+			JWT_STDERR_MESSAGE(errorCategory << ": " << ec.message());
 		}
 	} // namespace error
 } // namespace jwt
@@ -2754,7 +2752,7 @@ namespace jwt {
 				}
 
 				return json_traits::as_object(val);
-			};
+			}
 
 			/**
 			 * Check if a claim is present in the map
@@ -3930,7 +3928,7 @@ namespace jwt {
 		 * \throw std::runtime_error If claim was not present
 		 * \throw std::bad_cast Claim was present but not a array (Should not happen in a valid token)
 		 */
-		typename json_traits::array_type get_x5c() const { return get_jwk_claim("x5c").as_array(); };
+		typename json_traits::array_type get_x5c() const { return get_jwk_claim("x5c").as_array(); }
 
 		/**
 		 * Get X509 URL claim
@@ -3938,7 +3936,7 @@ namespace jwt {
 		 * \throw std::runtime_error If claim was not present
 		 * \throw std::bad_cast Claim was present but not a string (Should not happen in a valid token)
 		 */
-		typename json_traits::string_type get_x5u() const { return get_jwk_claim("x5u").as_string(); };
+		typename json_traits::string_type get_x5u() const { return get_jwk_claim("x5u").as_string(); }
 
 		/**
 		 * Get X509 thumbprint claim
@@ -3946,7 +3944,7 @@ namespace jwt {
 		 * \throw std::runtime_error If claim was not present
 		 * \throw std::bad_cast Claim was present but not a string (Should not happen in a valid token)
 		 */
-		typename json_traits::string_type get_x5t() const { return get_jwk_claim("x5t").as_string(); };
+		typename json_traits::string_type get_x5t() const { return get_jwk_claim("x5t").as_string(); }
 
 		/**
 		 * Get X509 SHA256 thumbprint claim
@@ -3954,7 +3952,7 @@ namespace jwt {
 		 * \throw std::runtime_error If claim was not present
 		 * \throw std::bad_cast Claim was present but not a string (Should not happen in a valid token)
 		 */
-		typename json_traits::string_type get_x5t_sha256() const { return get_jwk_claim("x5t#S256").as_string(); };
+		typename json_traits::string_type get_x5t_sha256() const { return get_jwk_claim("x5t#S256").as_string(); }
 
 		/**
 		 * Get x5c claim as a string
@@ -3970,7 +3968,7 @@ namespace jwt {
 			}
 
 			return json_traits::as_string(x5c_array.front());
-		};
+		}
 
 		/**
 		 * Check if a key type is present ("kty")

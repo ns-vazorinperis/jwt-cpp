@@ -251,7 +251,7 @@ inline value::value(int64_t i) : type_(int64_type), u_() {
 inline value::value(double n) : type_(number_type), u_() {
   if (
 #ifdef _MSC_VER
-      !_finite(n)
+      !_finitef(n)
 #elif __cplusplus >= 201103L
       std::isnan(n) || std::isinf(n)
 #else
